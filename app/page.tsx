@@ -82,14 +82,14 @@ export default function Home() {
                         onClick={() => setShowDropdown(false)}
                         className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
-                        <span>📊</span>
+                        
                         Go to Dashboard
                       </Link>
                       <button
                         onClick={handleLogout}
                         className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100"
                       >
-                        <span>🚪</span>
+                        
                         Sign Out
                       </button>
                     </div>
