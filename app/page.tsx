@@ -188,7 +188,7 @@ export default function Home() {
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-100 group-hover:scale-105 transition-transform duration-500"
                 style={{ backgroundImage: `url('/docs.jpg')` }}
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50"></div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/50"></div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8 text-white">
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">Find Doctors Near You</h3>
@@ -203,7 +203,7 @@ export default function Home() {
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-100 group-hover:scale-105 transition-transform duration-500"
                 style={{ backgroundImage: `url('/booking.jpg')` }}
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50"></div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/50"></div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8 text-white">
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">Easy Online Booking</h3>
@@ -218,7 +218,7 @@ export default function Home() {
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-100 group-hover:scale-105 transition-transform duration-500"
                 style={{ backgroundImage: `url('/online.jpg')` }}
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50"></div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/50"></div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8 text-white">
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">Virtual Consultations</h3>
@@ -233,7 +233,7 @@ export default function Home() {
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-100 group-hover:scale-105 transition-transform duration-500"
                 style={{ backgroundImage: `url('/payment.jpg')` }}
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50"></div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/50"></div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8 text-white">
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">Secure & Transparent Payments</h3>
@@ -248,7 +248,7 @@ export default function Home() {
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-100 group-hover:scale-105 transition-transform duration-500"
                 style={{ backgroundImage: `url('/quality.jpg')` }}
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50"></div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/50"></div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8 text-white">
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">Quality-Assured Healthcare</h3>
@@ -263,7 +263,7 @@ export default function Home() {
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-100 group-hover:scale-105 transition-transform duration-500"
                 style={{ backgroundImage: `url('/records.jpg')` }}
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50"></div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/50"></div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8 text-white">
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">Medical Records Access</h3>
