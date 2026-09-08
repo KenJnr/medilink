@@ -9,10 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@daily-co/daily-js": "^0.92.2",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^5.9.1",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "@types/jitsi-meet": "^2.0.5",
     "lucide-react": "^1.39.0",
     "next": "16.3.4",
     "react": "19.2.8",

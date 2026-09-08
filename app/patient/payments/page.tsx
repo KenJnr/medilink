@@ -366,7 +366,7 @@ export default function PatientPaymentsPage() {
           {statsItems.map((item) => (
             <div 
               key={item.label} 
-              className={`bg-gradient-to-br ${item.gradient} rounded-xl px-4 py-6 shadow-sm relative overflow-hidden`}
+              className={`bg-linear-to-br ${item.gradient} rounded-xl px-4 py-6 shadow-sm relative overflow-hidden`}
             >
               {/* Circular Indicator - Top Right */}
               <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full">

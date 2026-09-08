@@ -132,7 +132,7 @@ export default function LoginPage() {
           }}
         />
 
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/40" />
+        <div className="absolute inset-0 bg-linear-to-r from-black/70 to-black/40" />
 
         <div className="relative z-10 flex flex-col justify-center p-12 text-white">
           <div className="max-w-md">

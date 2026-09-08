@@ -278,7 +278,7 @@ export default function DoctorAppointmentsPage() {
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0 overflow-hidden">
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-lg shrink-0 overflow-hidden">
                         {appointment.patient?.avatar_url ? (
                           <img
                             src={appointment.patient.avatar_url}

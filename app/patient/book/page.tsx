@@ -464,7 +464,7 @@ export default function QuickBookPage() {
                     className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow text-left"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0 overflow-hidden">
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-lg shrink-0 overflow-hidden">
                         {doctor.avatar_url ? (
                           <img src={doctor.avatar_url} alt={doctor.full_name} className="w-full h-full object-cover" />
                         ) : (

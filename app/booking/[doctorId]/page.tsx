@@ -318,6 +318,7 @@ export default function BookingPage() {
           amount: doctor.consultation_fee,
           currency: doctor.currency || 'GHS',
           status: 'pending',
+          provider: 'mock', // Replace with actual provider if needed
         })
 
       if (paymentError) throw paymentError

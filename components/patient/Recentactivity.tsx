@@ -263,7 +263,7 @@ export default function RecentActivity({ appointments: propAppointments }: Recen
           return (
             <div key={appointment.id} className="flex items-start gap-3">
               {/* Doctor Avatar */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm flex-shrink-0 mt-0.5 overflow-hidden ${avatarColor}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm shrink-0 mt-0.5 overflow-hidden ${avatarColor}`}>
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}
@@ -284,7 +284,7 @@ export default function RecentActivity({ appointments: propAppointments }: Recen
               </div>
               
               {/* Date */}
-              <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">
+              <span className="text-xs text-gray-400 shrink-0 mt-0.5">
                 {relativeDate}
               </span>
             </div>
