@@ -1,7 +1,7 @@
 // app/admin/doctors/page.tsx
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
 import Link from 'next/link'
@@ -21,7 +21,8 @@ interface Doctor {
   created_at: string
 }
 
-export default function AdminDoctorsPage() {
+// Separate component that uses useSearchParams
+function DoctorsContent() {
   const { user, userRole, loading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -161,13 +162,6 @@ export default function AdminDoctorsPage() {
   }
 
   const getStatusBadge = (status: string, userId: string) => {
-    // Check if user is suspended
-    const doctor = doctors.find(d => d.id === userId)
-    if (doctor) {
-      // We need to check the actual user status
-      // For now, use approval_status
-    }
-
     const styles: Record<string, string> = {
       active: 'bg-green-100 text-green-700 border border-green-200',
       pending: 'bg-yellow-100 text-yellow-700 border border-yellow-200',
@@ -377,5 +371,21 @@ export default function AdminDoctorsPage() {
         )}
       </main>
     </div>
+  )
+}
+
+// Main export wrapped with Suspense
+export default function AdminDoctorsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-gray-400 text-sm">Loading doctors...</p>
+        </div>
+      </div>
+    }>
+      <DoctorsContent />
+    </Suspense>
   )
 }
