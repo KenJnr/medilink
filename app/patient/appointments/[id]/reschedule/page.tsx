@@ -28,7 +28,7 @@ interface Appointment {
   reason: string | null
   fee: number
   currency: string
-  doctor_user?: {
+  doctor_user: {
     full_name: string
     avatar_url?: string | null
   } | null
@@ -220,7 +220,26 @@ export default function RescheduleAppointmentPage() {
 
         console.log('Appointment found:', data)
 
-        setAppointment(data as Appointment)
+        const mappedAppointment: Appointment = {
+  id: data.id,
+  patient_id: data.patient_id,
+  doctor_id: data.doctor_id,
+  starts_at: data.starts_at,
+  ends_at: data.ends_at,
+  status: data.status,
+  consultation_type: data.consultation_type,
+  reason: data.reason || null,
+  fee: data.fee,
+  currency: data.currency,
+  doctor_user: data.doctor_user && data.doctor_user.length > 0 
+    ? {
+        full_name: data.doctor_user[0]?.full_name || 'Unknown',
+        avatar_url: data.doctor_user[0]?.avatar_url || null,
+      }
+    : null
+}
+
+setAppointment(mappedAppointment)
 
         /*
          * -----------------------------------------------------
