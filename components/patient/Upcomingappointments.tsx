@@ -8,6 +8,7 @@ import type { Appointment } from '@/lib/types/patient-dashboard'
 import { getStatusBadge } from '@/lib/appointment-status'
 import { createClient } from '@/lib/supabase/client'
 import PaymentModal from '@/components/payment/PaymentModal'
+import VideoCallButton from '@/components/video/VideoCallButton'
 
 interface UpcomingAppointmentsProps {
   appointments?: Appointment[]
@@ -121,7 +122,8 @@ export default function UpcomingAppointments({ appointments: propAppointments }:
           currency: app.currency,
           reason: app.reason,
           notes: app.notes,
-          doctor_id: app.doctor_id,
+          doctor_id: app.doctor_id,        // ✅ Added
+          patient_id: app.patient_id,      // ✅ Added
           doctor_profiles: {
             users: {
               full_name: doctorUser.full_name || 'Unknown',
@@ -144,12 +146,8 @@ export default function UpcomingAppointments({ appointments: propAppointments }:
     }
   }
 
-  const handleJoinCall = (appointmentId: string) => {
-    alert(`Joining call for appointment #${appointmentId}\n\nThis feature will be available soon! 🎥`)
-  }
-
   const handleReschedule = (appointmentId: string) => {
-    alert(`Reschedule appointment #${appointmentId}\n\nThis feature will be available soon! 📅`)
+    window.location.href = `/patient/appointments/${appointmentId}/reschedule`
   }
 
   const handlePayNow = (appointment: Appointment) => {
@@ -163,10 +161,8 @@ export default function UpcomingAppointments({ appointments: propAppointments }:
     setProcessingPayment(true)
 
     try {
-      // Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 2000))
 
-      // Update payment status
       const { error: paymentError } = await supabase
         .from('payments')
         .update({
@@ -178,7 +174,6 @@ export default function UpcomingAppointments({ appointments: propAppointments }:
 
       if (paymentError) throw paymentError
 
-      // Update appointment status
       const { error: appointmentError } = await supabase
         .from('appointments')
         .update({ status: 'confirmed' })
@@ -186,7 +181,6 @@ export default function UpcomingAppointments({ appointments: propAppointments }:
 
       if (appointmentError) throw appointmentError
 
-      // Refresh appointments
       await fetchUpcomingAppointments()
       setShowPaymentModal(false)
       setSelectedAppointment(null)
@@ -314,13 +308,14 @@ export default function UpcomingAppointments({ appointments: propAppointments }:
                           <CalendarClock size={16} />
                           Reschedule
                         </button>
-                        <button
-                          onClick={() => handleJoinCall(appointment.id)}
-                          className="inline-flex items-center justify-center gap-2 px-6 py-2 text-sm font-medium text-white bg-black/80 rounded-lg hover:bg-black transition-colors flex-1 sm:flex-none min-w-[120px]"
-                        >
-                          <Video size={16} />
-                          Join Call
-                        </button>
+                        
+                        <VideoCallButton 
+                          appointmentId={appointment.id}
+                          doctorId={appointment.doctor_id}
+                          patientId={appointment.patient_id}
+                          role="patient"
+                          className="flex-1 sm:flex-none min-w-[120px] bg-black/80 hover:bg-black"
+                        />
                       </>
                     )}
 
@@ -349,11 +344,14 @@ export default function UpcomingAppointments({ appointments: propAppointments }:
             setShowPaymentModal(false)
             setSelectedAppointment(null)
           }}
-          onConfirm={handlePaymentConfirm}
           amount={selectedAppointment.fee || selectedAppointment.doctor_profiles?.consultation_fee || 0}
           currency={selectedAppointment.currency || 'GHS'}
           doctorName={selectedAppointment.doctor_profiles?.users?.full_name || 'Unknown'}
           appointmentId={selectedAppointment.id}
+          doctorId={selectedAppointment.doctor_id}
+          onSuccess={() => {
+            console.log('Payment initiated successfully')
+          }}
         />
       )}
     </div>

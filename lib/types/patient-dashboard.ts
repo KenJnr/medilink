@@ -17,6 +17,8 @@ export interface Appointment {
   consultation_type?: string
    fee?: number
   currency?: string
+  doctor_id: string      // ✅ Add this
+  patient_id: string     // ✅ Add this
   doctor_profiles: {
     id?: string
     users: {

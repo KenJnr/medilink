@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider'
 import Link from 'next/link'
 import PaymentCard from '@/components/payment/PaymentCard'
 import PaymentModal from '@/components/payment/PaymentModal'
+import { useRouter } from 'next/navigation'
 
 interface PaymentWithAppointment {
   id: string
@@ -49,6 +50,7 @@ export default function PatientPaymentsPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     if (user) {
@@ -405,6 +407,7 @@ export default function PatientPaymentsPage() {
                 date={payment.created_at}
                 avatarUrl={payment.appointment?.doctor?.avatar_url || null}
                 onPay={payment.status === 'pending' ? () => handlePayNow(payment) : undefined}
+                onViewReceipt={payment.status === 'paid' ? () => router.push(`/patient/receipt/${payment.id}`) : undefined}
               />
             ))}
           </div>
@@ -418,7 +421,11 @@ export default function PatientPaymentsPage() {
             setShowPaymentModal(false)
             setSelectedPayment(null)
           }}
-          onConfirm={handlePaymentConfirm}
+         doctorId={selectedPayment.appointment?.doctor_id || ''} 
+  onSuccess={() => {
+    // Optional: Handle success before redirect
+    console.log('Payment initiated successfully')
+  }}
           amount={selectedPayment.amount}
           currency={selectedPayment.currency}
           doctorName={selectedPayment.appointment?.doctor?.full_name || 'Unknown'}
