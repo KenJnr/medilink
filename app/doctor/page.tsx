@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
 import Link from 'next/link'
-import { Calendar, DollarSign, CalendarDays, Edit } from 'lucide-react'
+import { Calendar, DollarSign, CalendarDays, Edit, Upload, CheckCircle, AlertCircle, FileText } from 'lucide-react'
 
 interface DoctorProfile {
   id: string
@@ -20,6 +20,11 @@ interface DoctorProfile {
   consultation_type: string
   profile_image: string
   approval_status: string
+  documents_uploaded: boolean
+  document_status: string
+  license_document: string | null
+  id_document: string | null
+  qualification_document: string | null
   specialties: { name: string }
 }
 
@@ -45,6 +50,8 @@ export default function DoctorDashboard() {
   const [stats, setStats] = useState({ today: 0, upcoming: 0, completed: 0, totalEarnings: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showDocumentUpload, setShowDocumentUpload] = useState(false)
+  const [documentStatus, setDocumentStatus] = useState<string>('')
 
   useEffect(() => {
     if (!authLoading && user && userRole === 'doctor') {
@@ -82,7 +89,7 @@ export default function DoctorDashboard() {
             setLoading(false)
             return
           }
-          activeProfile = { ...newProfile, specialties: { name: 'Not set' } }
+          activeProfile = { ...newProfile, specialties: { name: 'Not set' }, documents_uploaded: false, document_status: 'pending', license_document: null, id_document: null, qualification_document: null }
           setDoctorProfile(activeProfile)
         } else if (profileError.code === '42501') {
           setError('Permission denied. Please contact support.')
@@ -96,6 +103,10 @@ export default function DoctorDashboard() {
       } else {
         activeProfile = profileData
         setDoctorProfile(profileData)
+      }
+
+      if (activeProfile) {
+        checkDocumentStatus(activeProfile)
       }
 
       if (activeProfile?.approval_status === 'active') {
@@ -137,6 +148,22 @@ export default function DoctorDashboard() {
     }
   }
 
+  const checkDocumentStatus = (profile: DoctorProfile) => {
+    if (profile.approval_status === 'active') {
+      setDocumentStatus('approved')
+      setShowDocumentUpload(false)
+      return
+    }
+
+    if (profile.documents_uploaded) {
+      setDocumentStatus(profile.document_status || 'pending')
+      setShowDocumentUpload(false)
+    } else {
+      setShowDocumentUpload(true)
+      setDocumentStatus('missing')
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       confirmed: 'bg-green-50 text-green-700',
@@ -154,8 +181,6 @@ export default function DoctorDashboard() {
     }
     return { className: styles[status] || 'bg-gray-50 text-gray-700', label: labels[status] || status }
   }
-
-  // --- Render-based gating (no router.push anywhere in this file) ---
 
   if (authLoading || loading) {
     return (
@@ -234,11 +259,56 @@ export default function DoctorDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {isPending && (
+        {/* Document Upload Prompt - Clean version */}
+        {isPending && showDocumentUpload && (
+          <div className="mb-6 p-4 bg-white border border-blue-200 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Document Verification Required</p>
+                  <p className="text-xs text-gray-500">Upload your documents to get verified and start practicing</p>
+                </div>
+              </div>
+              <Link
+                href="/doctor/documents"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                Upload Documents
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Document Status - Show when documents are uploaded but pending approval */}
+        {isPending && !showDocumentUpload && documentStatus === 'pending' && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-800">
+                  Documents Under Review
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Your documents have been submitted and are being reviewed by our admin team.
+                  You will be notified once approved.
+                </p>
+                <p className="text-xs text-blue-500 mt-2">
+                  Check your document status on the profile page.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending Notice (without document upload) */}
+        {isPending && !showDocumentUpload && documentStatus !== 'pending' && documentStatus !== 'approved' && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-300 rounded-lg">
             <p className="text-sm text-yellow-700">
               Your account is pending admin approval. You can set up your profile and schedule while you wait.
-              Patients will not be able to book with you until approved.
             </p>
           </div>
         )}
@@ -356,7 +426,7 @@ export default function DoctorDashboard() {
           </div>
         )}
 
-        {isPending && (
+        {isPending && !showDocumentUpload && documentStatus !== 'pending' && documentStatus !== 'approved' && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-sm font-medium text-gray-900 mb-4">Get Started</h2>
             <div className="space-y-3">

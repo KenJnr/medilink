@@ -155,6 +155,7 @@ export default function AdminDashboard() {
     { title: 'View Users', href: '/admin/users', icon: Users },
     { title: 'All Appointments', href: '/admin/appointments', icon: Calendar },
     { title: 'Payments', href: '/admin/payments', icon: CreditCard },
+    { title: 'Profile', href: '/admin/profile', icon: User },
   ]
 
   return (

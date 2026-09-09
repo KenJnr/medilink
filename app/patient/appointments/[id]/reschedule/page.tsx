@@ -1,32 +1,42 @@
-// app/patient/appointments/[id]/reschedule/page.tsx
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  AlertCircle,
+} from 'lucide-react'
+
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
-import { Check } from 'lucide-react'
 
 interface Appointment {
   id: string
+  patient_id: string
+  doctor_id: string
   starts_at: string
   ends_at: string
   status: string
-  reason: string
   consultation_type: string
+  reason: string | null
   fee: number
   currency: string
-  doctor_id: string
-  doctor: {
+  doctor_user?: {
     full_name: string
-    avatar_url: string | null
-    specialty: string
-  }
+    avatar_url?: string | null
+  } | null
 }
 
 interface Schedule {
   id: string
+  doctor_id: string
   weekday: string
   start_time: string
   end_time: string
@@ -35,522 +45,1277 @@ interface Schedule {
 }
 
 interface TimeSlot {
-  time: string
+  start: Date
+  end: Date
   available: boolean
-  isBooked: boolean
 }
 
-const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAYS_OF_WEEK = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+]
 
-const getDayName = (date: Date): string => {
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-  return days[date.getDay()]
-}
+const DAY_LABELS = [
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+]
 
-export default function ReschedulePage() {
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+export default function RescheduleAppointmentPage() {
   const params = useParams()
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
+
+  const supabase = useMemo(() => createClient(), [])
+
   const appointmentId = params.id as string
-  const { user, userRole, loading: authLoading } = useAuth()
-  const supabase = createClient()
 
   const [appointment, setAppointment] = useState<Appointment | null>(null)
   const [schedules, setSchedules] = useState<Schedule[]>([])
-  const [loading, setLoading] = useState(true)
-  const [rescheduling, setRescheduling] = useState(false)
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
+
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
+
+  const [loading, setLoading] = useState(true)
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [rescheduling, setRescheduling] = useState(false)
+
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
+  const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login')
-      return
-    }
-    if (user) {
-      fetchAppointment()
-    }
-  }, [user, authLoading])
+  const [currentMonth, setCurrentMonth] = useState(new Date())
 
-  // Generate time slots when selectedDate or schedules change
-  useEffect(() => {
-    if (selectedDate && schedules.length > 0 && appointment) {
-      generateTimeSlots()
-    }
-  }, [selectedDate, schedules, appointment])
+  /*
+   * ---------------------------------------------------------
+   * Helpers
+   * ---------------------------------------------------------
+   */
 
-  const fetchAppointment = async () => {
-    if (!user) return
+  const formatDateForDatabase = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
 
-    setLoading(true)
-    setError('')
-
-    try {
-      // Fetch appointment details
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-          *,
-          doctor_user:doctor_id (
-            full_name,
-            avatar_url
-          )
-        `)
-        .eq('id', appointmentId)
-        .eq('patient_id', user.id)
-        .single()
-
-      if (error) throw error
-
-      if (!data) {
-        router.push('/patient/appointments')
-        return
-      }
-
-      const doctorUser = data.doctor_user || {}
-      
-      const appointmentData: Appointment = {
-        ...data,
-        doctor: {
-          full_name: doctorUser.full_name || 'Unknown',
-          avatar_url: doctorUser.avatar_url || null,
-          specialty: '',
-        }
-      }
-
-      setAppointment(appointmentData)
-
-      // Fetch doctor's schedule
-      const { data: scheduleData, error: scheduleError } = await supabase
-        .from('doctor_schedules')
-        .select('*')
-        .eq('doctor_id', data.doctor_id)
-        .eq('active', true)
-
-      if (scheduleError) throw scheduleError
-
-      const mappedSchedules: Schedule[] = (scheduleData || []).map((s: any) => ({
-        id: s.id,
-        weekday: s.weekday,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        slot_duration: s.slot_duration || 30,
-        active: s.active || true,
-      }))
-      setSchedules(mappedSchedules)
-
-      // Set default selected date to current appointment date
-      const currentDate = new Date(data.starts_at)
-      setSelectedDate(currentDate)
-
-    } catch (error) {
-      console.error('Error fetching appointment:', error)
-      setError('Failed to load appointment details')
-    } finally {
-      setLoading(false)
-    }
+    return `${year}-${month}-${day}`
   }
 
-  const generateTimeSlots = async () => {
-    if (!appointment || !selectedDate) {
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  }
+
+  const isSameDay = (a: Date, b: Date) => {
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    )
+  }
+
+  const isPastDate = (date: Date) => {
+    const today = new Date()
+
+    today.setHours(0, 0, 0, 0)
+
+    const compareDate = new Date(date)
+    compareDate.setHours(0, 0, 0, 0)
+
+    return compareDate < today
+  }
+
+  const getScheduleForDate = (date: Date) => {
+    const weekday = DAYS_OF_WEEK[date.getDay()]
+
+    return schedules.find(
+      (schedule) =>
+        schedule.weekday.toLowerCase() === weekday &&
+        schedule.active
+    )
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * Fetch appointment
+   * ---------------------------------------------------------
+   */
+
+  useEffect(() => {
+    if (authLoading || !user || !appointmentId) {
       return
     }
 
-    const dayName = getDayName(selectedDate)
-    const schedule = schedules.find((s: any) => s.weekday === dayName && s.active)
+    const fetchAppointment = async () => {
+      try {
+        setLoading(true)
+        setError('')
 
-    if (!schedule) {
+        console.log('Fetching appointment for reschedule...')
+        console.log('Fetching appointment ID:', appointmentId)
+
+        const { data, error: appointmentError } = await supabase
+          .from('appointments')
+          .select(`
+            id,
+            patient_id,
+            doctor_id,
+            starts_at,
+            ends_at,
+            status,
+            consultation_type,
+            reason,
+            fee,
+            currency,
+            doctor_user:users!appointments_doctor_id_fkey (
+              full_name,
+              avatar_url
+            )
+          `)
+          .eq('id', appointmentId)
+          .eq('patient_id', user.id)
+          .single()
+
+        if (appointmentError) {
+          console.error(
+            'Error fetching appointment:',
+            appointmentError
+          )
+
+          throw new Error(
+            appointmentError.message ||
+              'Failed to load appointment'
+          )
+        }
+
+        if (!data) {
+          throw new Error('Appointment not found')
+        }
+
+        console.log('Appointment found:', data)
+
+        setAppointment(data as Appointment)
+
+        /*
+         * -----------------------------------------------------
+         * IMPORTANT:
+         *
+         * appointment.doctor_id is the doctor's USER ID.
+         *
+         * doctor_schedules.doctor_id uses doctor_profiles.id.
+         *
+         * Therefore:
+         *
+         * appointment.doctor_id
+         *        ↓
+         * doctor_profiles.user_id
+         *        ↓
+         * doctor_profiles.id
+         *        ↓
+         * doctor_schedules.doctor_id
+         * -----------------------------------------------------
+         */
+
+        console.log(
+          'Looking up doctor profile using user ID:',
+          data.doctor_id
+        )
+
+        const { data: doctorProfile, error: doctorProfileError } =
+          await supabase
+            .from('doctor_profiles')
+            .select('id, user_id')
+            .eq('user_id', data.doctor_id)
+            .single()
+
+        if (doctorProfileError) {
+          console.error(
+            'Error fetching doctor profile:',
+            doctorProfileError
+          )
+
+          throw new Error(
+            'Could not find the doctor profile for this appointment.'
+          )
+        }
+
+        if (!doctorProfile) {
+          throw new Error('Doctor profile not found.')
+        }
+
+        console.log('Doctor profile found:', doctorProfile)
+
+        /*
+         * -----------------------------------------------------
+         * NOW use doctor_profiles.id to fetch schedules.
+         * -----------------------------------------------------
+         */
+
+        console.log(
+          'Fetching schedule using doctor profile ID:',
+          doctorProfile.id
+        )
+
+        const { data: scheduleData, error: scheduleError } =
+          await supabase
+            .from('doctor_schedules')
+            .select('*')
+            .eq('doctor_id', doctorProfile.id)
+            .eq('active', true)
+            .order('weekday')
+            .order('start_time')
+
+        if (scheduleError) {
+          console.error(
+            'Error fetching doctor schedule:',
+            scheduleError
+          )
+
+          throw new Error(
+            scheduleError.message ||
+              'Failed to load doctor schedule'
+          )
+        }
+
+        console.log('Raw schedule data:', scheduleData)
+
+        const mappedSchedules: Schedule[] = (scheduleData || []).map(
+          (schedule) => ({
+            ...schedule,
+            active: schedule.active ?? true,
+            weekday: String(schedule.weekday).toLowerCase(),
+          })
+        )
+
+        console.log('Mapped schedules:', mappedSchedules)
+
+        setSchedules(mappedSchedules)
+
+        /*
+         * Set the currently booked date initially.
+         */
+        const appointmentDate = new Date(data.starts_at)
+
+        console.log(
+          'Current appointment date:',
+          appointmentDate
+        )
+
+        setSelectedDate(appointmentDate)
+
+        setCurrentMonth(
+          new Date(
+            appointmentDate.getFullYear(),
+            appointmentDate.getMonth(),
+            1
+          )
+        )
+      } catch (err) {
+        console.error('Reschedule page error:', err)
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to load appointment'
+        )
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAppointment()
+  }, [authLoading, user, appointmentId, supabase])
+
+  /*
+   * ---------------------------------------------------------
+   * Generate available time slots
+   * ---------------------------------------------------------
+   */
+
+  useEffect(() => {
+    if (!selectedDate || !appointment || schedules.length === 0) {
       setTimeSlots([])
       return
     }
 
-    const slots: TimeSlot[] = []
-    const [startHour, startMinute] = schedule.start_time.split(':').map(Number)
-    const [endHour, endMinute] = schedule.end_time.split(':').map(Number)
-    const duration = schedule.slot_duration || 30
+    const generateTimeSlots = async () => {
+      try {
+        setSlotsLoading(true)
+        setSelectedSlot(null)
 
-    const startTotalMinutes = startHour * 60 + startMinute
-    const endTotalMinutes = endHour * 60 + endMinute
+        const schedule = getScheduleForDate(selectedDate)
 
-    const dateStr = selectedDate.toISOString().split('T')[0]
+        console.log('Selected date:', selectedDate)
+        console.log('Schedule for selected date:', schedule)
 
-    // Get booked appointments for this doctor on this date
-    const { data: bookedAppointments } = await supabase
-      .from('appointments')
-      .select('starts_at')
-      .eq('doctor_id', appointment.doctor_id)
-      .gte('starts_at', `${dateStr}T00:00:00`)
-      .lt('starts_at', `${dateStr}T23:59:59`)
-      .in('status', ['confirmed', 'pending_payment', 'payment_processing'])
-
-    const bookedTimes = new Set()
-    bookedAppointments?.forEach((app: any) => {
-      const time = new Date(app.starts_at)
-      const hours = time.getHours().toString().padStart(2, '0')
-      const minutes = time.getMinutes().toString().padStart(2, '0')
-      bookedTimes.add(`${hours}:${minutes}`)
-    })
-
-    // Get current appointment time to exclude it from booked times if on same day
-    const currentTime = new Date(appointment.starts_at)
-    const currentTimeStr = currentTime.toTimeString().slice(0, 5)
-    const isSameDay = selectedDate.toDateString() === new Date(appointment.starts_at).toDateString()
-
-    for (let minutes = startTotalMinutes; minutes < endTotalMinutes; minutes += duration) {
-      const hours = Math.floor(minutes / 60)
-      const mins = minutes % 60
-      const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
-      
-      // If same day and this is the current appointment time, mark as available
-      const isCurrentSlot = isSameDay && timeStr === currentTimeStr
-      
-      slots.push({
-        time: timeStr,
-        available: !bookedTimes.has(timeStr) || isCurrentSlot,
-        isBooked: bookedTimes.has(timeStr) && !isCurrentSlot,
-      })
-    }
-
-    setTimeSlots(slots)
-
-    // Auto-select current slot if available on the same day
-    if (isSameDay) {
-      const slotExists = slots.some(s => s.time === currentTimeStr && s.available)
-      if (slotExists) {
-        setSelectedSlot(currentTimeStr)
-      }
-    }
-  }
-
-  const handleDateSelect = (date: Date) => {
-    setSelectedDate(date)
-    setSelectedSlot(null)
-  }
-
-  const handleSlotSelect = (slot: string) => {
-    setSelectedSlot(slot)
-  }
-
-  const handleReschedule = async () => {
-    if (!appointment || !selectedDate || !selectedSlot) return
-
-    setRescheduling(true)
-    setError('')
-
-    try {
-      const [hours, minutes] = selectedSlot.split(':').map(Number)
-      const startDateTime = new Date(selectedDate)
-      startDateTime.setHours(hours, minutes, 0, 0)
-      
-      const endDateTime = new Date(startDateTime)
-      const dayName = getDayName(selectedDate)
-      const schedule = schedules.find((s: any) => s.weekday === dayName)
-      const duration = schedule?.slot_duration || 30
-      endDateTime.setMinutes(endDateTime.getMinutes() + duration)
-
-      const { error: updateError } = await supabase
-        .from('appointments')
-        .update({
-          starts_at: startDateTime.toISOString(),
-          ends_at: endDateTime.toISOString(),
-        })
-        .eq('id', appointment.id)
-
-      if (updateError) {
-        if (updateError.code === '23505') {
-          setError('This time slot has already been booked. Please select another time.')
-          generateTimeSlots()
+        if (!schedule) {
+          setTimeSlots([])
           return
         }
-        throw updateError
+
+        /*
+         * Get all appointments for this doctor on the selected date.
+         *
+         * appointment.doctor_id is the USER ID, which is what
+         * appointments uses.
+         */
+
+        const dateString = formatDateForDatabase(selectedDate)
+
+        const startOfDay = `${dateString}T00:00:00`
+        const endOfDay = `${dateString}T23:59:59.999`
+
+        const { data: bookedAppointments, error: bookedError } =
+          await supabase
+            .from('appointments')
+            .select(
+              'id, starts_at, ends_at, status'
+            )
+            .eq('doctor_id', appointment.doctor_id)
+            .neq('id', appointment.id)
+            .in('status', [
+              'confirmed',
+              'pending_payment',
+              'payment_processing',
+            ])
+            .gte('starts_at', startOfDay)
+            .lte('starts_at', endOfDay)
+
+        if (bookedError) {
+          console.error(
+            'Error fetching booked appointments:',
+            bookedError
+          )
+
+          throw new Error(
+            bookedError.message ||
+              'Failed to check appointment availability'
+          )
+        }
+
+        console.log(
+          'Booked appointments:',
+          bookedAppointments
+        )
+
+        /*
+         * Convert schedule start/end into Date objects.
+         */
+
+        const [startHour, startMinute] =
+          schedule.start_time.split(':').map(Number)
+
+        const [endHour, endMinute] =
+          schedule.end_time.split(':').map(Number)
+
+        const scheduleStart = new Date(selectedDate)
+        scheduleStart.setHours(
+          startHour,
+          startMinute,
+          0,
+          0
+        )
+
+        const scheduleEnd = new Date(selectedDate)
+        scheduleEnd.setHours(
+          endHour,
+          endMinute,
+          0,
+          0
+        )
+
+        const duration =
+          Number(schedule.slot_duration) || 30
+
+        const generatedSlots: TimeSlot[] = []
+
+        let slotStart = new Date(scheduleStart)
+
+        const now = new Date()
+
+        while (slotStart < scheduleEnd) {
+          const slotEnd = new Date(
+            slotStart.getTime() +
+              duration * 60 * 1000
+          )
+
+          /*
+           * Don't create a slot that goes beyond the doctor's
+           * working hours.
+           */
+          if (slotEnd > scheduleEnd) {
+            break
+          }
+
+          /*
+           * If selected date is today, don't show past slots.
+           */
+          const isPastTime =
+            isSameDay(selectedDate, now) &&
+            slotStart <= now
+
+          /*
+           * Check whether this slot overlaps another appointment.
+           */
+          const overlapsAppointment =
+            bookedAppointments?.some((booked) => {
+              const bookedStart = new Date(
+                booked.starts_at
+              )
+
+              const bookedEnd = new Date(
+                booked.ends_at
+              )
+
+              return (
+                slotStart < bookedEnd &&
+                slotEnd > bookedStart
+              )
+            }) ?? false
+
+          generatedSlots.push({
+            start: new Date(slotStart),
+            end: new Date(slotEnd),
+            available:
+              !isPastTime &&
+              !overlapsAppointment,
+          })
+
+          slotStart = slotEnd
+        }
+
+        console.log(
+          'Generated time slots:',
+          generatedSlots
+        )
+
+        setTimeSlots(generatedSlots)
+      } catch (err) {
+        console.error(
+          'Error generating time slots:',
+          err
+        )
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to generate available times'
+        )
+
+        setTimeSlots([])
+      } finally {
+        setSlotsLoading(false)
+      }
+    }
+
+    generateTimeSlots()
+  }, [
+    selectedDate,
+    appointment,
+    schedules,
+    supabase,
+  ])
+
+  /*
+   * ---------------------------------------------------------
+   * Available dates
+   * ---------------------------------------------------------
+   */
+
+  const availableDates = useMemo(() => {
+    if (schedules.length === 0) {
+      return []
+    }
+
+    const dates: Date[] = []
+
+    const startDate = new Date()
+    startDate.setHours(0, 0, 0, 0)
+
+    /*
+     * Look ahead 60 days.
+     */
+    for (let i = 0; i < 60; i++) {
+      const date = new Date(startDate)
+
+      date.setDate(
+        startDate.getDate() + i
+      )
+
+      const weekday =
+        DAYS_OF_WEEK[date.getDay()]
+
+      const hasSchedule = schedules.some(
+        (schedule) =>
+          schedule.active &&
+          schedule.weekday.toLowerCase() ===
+            weekday
+      )
+
+      if (hasSchedule) {
+        dates.push(date)
+      }
+    }
+
+    console.log(
+      'Available dates:',
+      dates
+    )
+
+    return dates
+  }, [schedules])
+
+  /*
+   * ---------------------------------------------------------
+   * Calendar
+   * ---------------------------------------------------------
+   */
+
+  const calendarDays = useMemo(() => {
+    const year =
+      currentMonth.getFullYear()
+
+    const month =
+      currentMonth.getMonth()
+
+    const firstDay = new Date(
+      year,
+      month,
+      1
+    )
+
+    const lastDay = new Date(
+      year,
+      month + 1,
+      0
+    )
+
+    const days: (Date | null)[] = []
+
+    /*
+     * Sunday = 0.
+     */
+    for (
+      let i = 0;
+      i < firstDay.getDay();
+      i++
+    ) {
+      days.push(null)
+    }
+
+    for (
+      let day = 1;
+      day <= lastDay.getDate();
+      day++
+    ) {
+      days.push(
+        new Date(
+          year,
+          month,
+          day
+        )
+      )
+    }
+
+    return days
+  }, [currentMonth])
+
+  const isDateAvailable = (
+    date: Date
+  ) => {
+    return availableDates.some(
+      (availableDate) =>
+        isSameDay(
+          availableDate,
+          date
+        )
+    )
+  }
+
+  const goToPreviousMonth = () => {
+    setCurrentMonth(
+      new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth() - 1,
+        1
+      )
+    )
+  }
+
+  const goToNextMonth = () => {
+    setCurrentMonth(
+      new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth() + 1,
+        1
+      )
+    )
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * Select date
+   * ---------------------------------------------------------
+   */
+
+  const handleDateSelect = (
+    date: Date
+  ) => {
+    if (
+      isPastDate(date) ||
+      !isDateAvailable(date)
+    ) {
+      return
+    }
+
+    setSelectedDate(date)
+    setSelectedSlot(null)
+    setError('')
+    setSuccess('')
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * Reschedule
+   * ---------------------------------------------------------
+   */
+
+  const handleReschedule = async () => {
+    if (
+      !appointment ||
+      !selectedDate ||
+      !selectedSlot
+    ) {
+      return
+    }
+
+    try {
+      setRescheduling(true)
+      setError('')
+      setSuccess('')
+
+      const newStart = selectedSlot.start
+      const newEnd = selectedSlot.end
+
+      console.log(
+        'Rescheduling appointment:',
+        appointment.id
+      )
+
+      console.log(
+        'New start:',
+        newStart.toISOString()
+      )
+
+      console.log(
+        'New end:',
+        newEnd.toISOString()
+      )
+
+      /*
+       * Final availability check before updating.
+       *
+       * This is important because another patient may have
+       * booked the slot while this page was open.
+       */
+
+      const { data: conflictingAppointments, error: conflictError } =
+        await supabase
+          .from('appointments')
+          .select(
+            'id, starts_at, ends_at, status'
+          )
+          .eq(
+            'doctor_id',
+            appointment.doctor_id
+          )
+          .neq(
+            'id',
+            appointment.id
+          )
+          .in('status', [
+            'confirmed',
+            'pending_payment',
+            'payment_processing',
+          ])
+          .lt(
+            'starts_at',
+            newEnd.toISOString()
+          )
+          .gt(
+            'ends_at',
+            newStart.toISOString()
+          )
+
+      if (conflictError) {
+        throw new Error(
+          conflictError.message
+        )
       }
 
-      setSuccess(true)
-      setTimeout(() => {
-        router.push(`/patient/appointments/${appointment.id}`)
-      }, 2000)
+      if (
+        conflictingAppointments &&
+        conflictingAppointments.length > 0
+      ) {
+        throw new Error(
+          'This time slot has just been booked. Please choose another time.'
+        )
+      }
 
-    } catch (error: any) {
-      console.error('Reschedule error:', error)
-      setError(error.message || 'Failed to reschedule appointment. Please try again.')
+      /*
+       * Update appointment.
+       *
+       * We preserve the current appointment status here.
+       */
+
+      const { error: updateError } =
+        await supabase
+          .from('appointments')
+          .update({
+            starts_at:
+              newStart.toISOString(),
+            ends_at:
+              newEnd.toISOString(),
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq(
+            'id',
+            appointment.id
+          )
+          .eq(
+            'patient_id',
+            user?.id
+          )
+
+      if (updateError) {
+        console.error(
+          'Reschedule update error:',
+          updateError
+        )
+
+        throw new Error(
+          updateError.message ||
+            'Failed to reschedule appointment'
+        )
+      }
+
+      setSuccess(
+        'Your appointment has been rescheduled successfully.'
+      )
+
+      /*
+       * Give the user a moment to see the success message.
+       */
+      setTimeout(() => {
+        router.push(
+          `/patient/appointments/${appointment.id}`
+        )
+      }, 1500)
+    } catch (err) {
+      console.error(
+        'Reschedule error:',
+        err
+      )
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to reschedule appointment'
+      )
     } finally {
       setRescheduling(false)
     }
   }
 
-  const getAvailableDates = () => {
-    const dates: Date[] = []
-    const today = new Date()
-    
-    // Check next 30 days
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(today)
-      date.setDate(date.getDate() + i)
-      const dayName = getDayName(date)
-      const hasSchedule = schedules.some((s: any) => s.weekday === dayName && s.active)
-      if (hasSchedule) {
-        dates.push(date)
-      }
-    }
-    return dates
-  }
+  /*
+   * ---------------------------------------------------------
+   * Loading states
+   * ---------------------------------------------------------
+   */
 
-  const formatDate = (date: Date | null) => {
-    if (!date) return 'Not selected'
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
-
-  if (authLoading || loading) {
+  if (
+    authLoading ||
+    loading
+  ) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-gray-400 text-sm">Loading...</p>
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
+
+          <p className="mt-3 text-gray-600">
+            Loading appointment...
+          </p>
         </div>
       </div>
     )
   }
 
-  if (!user || !appointment) {
+  /*
+   * ---------------------------------------------------------
+   * Error state
+   * ---------------------------------------------------------
+   */
+
+  if (
+    error &&
+    !appointment
+  ) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-sm p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+
+          <h2 className="text-xl font-semibold text-gray-900 mt-4">
+            Unable to load appointment
+          </h2>
+
+          <p className="text-gray-600 mt-2">
+            {error}
+          </p>
+
+          <Link
+            href="/patient/appointments"
+            className="inline-flex items-center gap-2 mt-6 px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to appointments
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (!appointment) {
     return null
   }
 
-  const availableDates = getAvailableDates()
+  /*
+   * ---------------------------------------------------------
+   * Render
+   * ---------------------------------------------------------
+   */
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="text-xl font-bold text-blue-600">
-                MediLink
-              </Link>
-              <span className="ml-3 text-sm text-gray-400 hidden sm:inline">Reschedule</span>
-            </div>
-            <Link href={`/patient/appointments/${appointmentId}`} className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-              Cancel
-            </Link>
-          </div>
-        </div>
-      </header>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-            <Link href="/patient/appointments" className="hover:text-gray-700">Appointments</Link>
-            <span>›</span>
-            <Link href={`/patient/appointments/${appointmentId}`} className="hover:text-gray-700">Details</Link>
-            <span>›</span>
-            <span className="text-gray-900 font-medium">Reschedule</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Reschedule Appointment</h1>
-          <p className="text-sm text-gray-500 mt-1">Select a new date and time for your appointment</p>
+          <Link
+            href={`/patient/appointments/${appointment.id}`}
+            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-5"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to appointment
+          </Link>
+
+          <h1 className="text-3xl font-bold text-gray-900">
+            Reschedule Appointment
+          </h1>
+
+          <p className="text-gray-600 mt-2">
+            Choose a new date and time for your appointment.
+          </p>
         </div>
 
-        {success && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center mb-8">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-green-600" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900">Appointment Rescheduled!</h2>
-            <p className="text-gray-600 mt-1">Your appointment has been successfully rescheduled.</p>
-            <p className="text-sm text-gray-500 mt-4">Redirecting to appointment details...</p>
+        {/* Alerts */}
+        {error && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+            <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
+
+            <p>{error}</p>
           </div>
         )}
 
-        {!success && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              {/* Current Appointment Info */}
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-sm font-medium text-gray-900 mb-4">Current Appointment</h2>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-lg shrink-0 overflow-hidden">
-                    {appointment.doctor.avatar_url ? (
-                      <img src={appointment.doctor.avatar_url} alt={appointment.doctor.full_name} className="w-full h-full object-cover" />
-                    ) : (
-                      appointment.doctor.full_name?.charAt(0) || 'D'
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">Dr. {appointment.doctor.full_name}</p>
-                    <p className="text-sm text-gray-500">{appointment.reason || 'General Consultation'}</p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      {new Date(appointment.starts_at).toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })} at {new Date(appointment.starts_at).toLocaleTimeString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
-                  </div>
-                </div>
+        {success && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-green-700">
+            <CheckCircle className="w-5 h-5 mt-0.5 shrink-0" />
+
+            <p>{success}</p>
+          </div>
+        )}
+
+        {/* Appointment information */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+          <div className="flex items-center gap-4">
+            {appointment.doctor_user?.avatar_url ? (
+              <img
+                src={
+                  appointment.doctor_user.avatar_url
+                }
+                alt={
+                  appointment.doctor_user.full_name
+                }
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                <span className="text-xl font-semibold text-blue-600">
+                  {appointment.doctor_user?.full_name
+                    ?.charAt(0)
+                    ?.toUpperCase() || 'D'}
+                </span>
               </div>
+            )}
 
-              {/* Date Selection */}
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h3 className="text-sm font-medium text-gray-900 mb-4">Select New Date</h3>
-                {availableDates.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">No available dates. Please check back later.</p>
-                ) : (
-                  <div className="grid grid-cols-7 gap-2">
-                    {availableDates.slice(0, 14).map((date, index) => {
-                      const isSelected = selectedDate && date.toDateString() === selectedDate.toDateString()
-                      const dayName = DAY_LABELS[date.getDay()]
-                      const dayNum = date.getDate()
-                      const isToday = date.toDateString() === new Date().toDateString()
+            <div>
+              <p className="text-sm text-gray-500">
+                Doctor
+              </p>
 
-                      return (
-                        <button
-                          key={index}
-                          onClick={() => handleDateSelect(date)}
-                          className={`p-2 rounded-lg text-center transition-colors ${
-                            isSelected
-                              ? 'bg-blue-600 text-white'
-                              : 'hover:bg-gray-50 border border-gray-200'
-                          }`}
-                        >
-                          <p className={`text-xs ${isSelected ? 'text-white/70' : 'text-gray-500'}`}>
-                            {dayName}
-                          </p>
-                          <p className={`font-semibold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
-                            {dayNum}
-                          </p>
-                          {isToday && (
-                            <p className={`text-[8px] ${isSelected ? 'text-white/70' : 'text-gray-400'}`}>
-                              Today
-                            </p>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {appointment.doctor_user?.full_name ||
+                  'Doctor'}
+              </h2>
+
+              <p className="text-sm text-gray-500 mt-1">
+                Current appointment:{' '}
+                {new Date(
+                  appointment.starts_at
+                ).toLocaleDateString(
+                  undefined,
+                  {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  }
+                )}{' '}
+                at{' '}
+                {formatTime(
+                  new Date(
+                    appointment.starts_at
+                  )
                 )}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-8">
+
+          {/* Calendar */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-blue-600" />
+
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Select a date
+                </h2>
               </div>
 
-              {/* Time Slots */}
-              {selectedDate && (
-                <div className="bg-white rounded-xl border border-gray-200 p-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-4">
-                    Available Times for {selectedDate.toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </h3>
-                  {timeSlots.length === 0 ? (
-                    <p className="text-sm text-gray-500">No available slots on this day</p>
-                  ) : (
-                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                      {timeSlots.map((slot) => (
-                        <button
-                          key={slot.time}
-                          onClick={() => slot.available && handleSlotSelect(slot.time)}
-                          disabled={!slot.available}
-                          className={`p-2 rounded-lg text-sm font-medium transition-colors ${
-                            slot.isBooked
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : selectedSlot === slot.time
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-50 text-gray-700 hover:bg-blue-50 border border-gray-200'
-                          }`}
-                        >
-                          {slot.time}
-                          {slot.isBooked && <span className="block text-[8px]">Booked</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={goToPreviousMonth}
+                  className="p-2 rounded-lg hover:bg-gray-100"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <span className="font-medium text-gray-900 min-w-[140px] text-center">
+                  {MONTH_NAMES[
+                    currentMonth.getMonth()
+                  ]}{' '}
+                  {currentMonth.getFullYear()}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={goToNextMonth}
+                  className="p-2 rounded-lg hover:bg-gray-100"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Weekday headings */}
+            <div className="grid grid-cols-7 gap-2 mb-2">
+              {DAY_LABELS.map(
+                (day) => (
+                  <div
+                    key={day}
+                    className="text-center text-xs font-medium text-gray-500 py-2"
+                  >
+                    {day}
+                  </div>
+                )
               )}
             </div>
 
-            {/* Summary */}
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl border border-gray-200 p-6 sticky top-24">
-                <h3 className="text-sm font-medium text-gray-900 mb-4">Reschedule Summary</h3>
-                
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Doctor</span>
-                    <span className="font-medium text-gray-900">Dr. {appointment.doctor.full_name}</span>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Current Date</span>
-                    <span className="font-medium text-gray-900">
-                      {new Date(appointment.starts_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </span>
-                  </div>
-                  
-                  {selectedDate && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">New Date</span>
-                      <span className="font-medium text-blue-600">
-                        {formatDate(selectedDate)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {selectedSlot && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">New Time</span>
-                      <span className="font-medium text-blue-600">{selectedSlot}</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Fee</span>
-                    <span className="font-semibold text-gray-900">
-                      {appointment.currency} {appointment.fee}
-                    </span>
-                  </div>
-                </div>
+            {/* Calendar days */}
+            <div className="grid grid-cols-7 gap-2">
+              {calendarDays.map(
+                (date, index) => {
+                  if (!date) {
+                    return (
+                      <div
+                        key={`empty-${index}`}
+                        className="h-11"
+                      />
+                    )
+                  }
 
-                {error && (
-                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
-                )}
+                  const available =
+                    isDateAvailable(
+                      date
+                    )
 
-                <button
-                  onClick={handleReschedule}
-                  disabled={!selectedSlot || rescheduling}
-                  className="mt-4 w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {rescheduling ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Rescheduling...
-                    </span>
-                  ) : (
-                    'Confirm Reschedule'
-                  )}
-                </button>
+                  const past =
+                    isPastDate(date)
 
-                <p className="mt-3 text-xs text-gray-400 text-center">
-                  You will be redirected to the appointment details after rescheduling.
-                </p>
+                  const selected =
+                    selectedDate &&
+                    isSameDay(
+                      selectedDate,
+                      date
+                    )
+
+                  const current =
+                    isSameDay(
+                      new Date(),
+                      date
+                    )
+
+                  return (
+                    <button
+                      key={date.toISOString()}
+                      type="button"
+                      disabled={
+                        !available ||
+                        past
+                      }
+                      onClick={() =>
+                        handleDateSelect(
+                          date
+                        )
+                      }
+                      className={`
+                        h-11 rounded-lg text-sm font-medium transition
+                        ${
+                          selected
+                            ? 'bg-blue-600 text-white'
+                            : available &&
+                              !past
+                            ? 'hover:bg-blue-50 text-gray-900'
+                            : 'text-gray-300 cursor-not-allowed'
+                        }
+                        ${
+                          current &&
+                          !selected
+                            ? 'ring-1 ring-blue-600'
+                            : ''
+                        }
+                      `}
+                    >
+                      {date.getDate()}
+                    </button>
+                  )
+                }
+              )}
+            </div>
+
+            <div className="mt-5 flex items-center gap-4 text-xs text-gray-500">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-blue-600" />
+                Selected
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full border border-blue-600" />
+                Today
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-gray-200" />
+                Unavailable
               </div>
             </div>
           </div>
-        )}
-      </main>
+
+          {/* Time slots */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Clock className="w-5 h-5 text-blue-600" />
+
+              <h2 className="text-lg font-semibold text-gray-900">
+                Select a time
+              </h2>
+            </div>
+
+            {!selectedDate ? (
+              <div className="text-center py-10">
+                <Calendar className="w-10 h-10 text-gray-300 mx-auto" />
+
+                <p className="text-gray-500 mt-3">
+                  Select a date first.
+                </p>
+              </div>
+            ) : slotsLoading ? (
+              <div className="text-center py-10">
+                <Loader2 className="w-7 h-7 animate-spin text-blue-600 mx-auto" />
+
+                <p className="text-gray-500 mt-3">
+                  Checking availability...
+                </p>
+              </div>
+            ) : timeSlots.length === 0 ? (
+              <div className="text-center py-10">
+                <Clock className="w-10 h-10 text-gray-300 mx-auto" />
+
+                <p className="font-medium text-gray-700 mt-3">
+                  No available times
+                </p>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  Please choose another date.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 max-h-[430px] overflow-y-auto">
+                {timeSlots.map(
+                  (slot) => {
+                    const selected =
+                      selectedSlot?.start.getTime() ===
+                      slot.start.getTime()
+
+                    return (
+                      <button
+                        key={slot.start.toISOString()}
+                        type="button"
+                        disabled={
+                          !slot.available
+                        }
+                        onClick={() =>
+                          setSelectedSlot(
+                            slot
+                          )
+                        }
+                        className={`
+                          px-3 py-3 rounded-lg border text-sm font-medium transition
+                          ${
+                            selected
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : slot.available
+                              ? 'border-gray-200 hover:border-blue-500 hover:bg-blue-50 text-gray-800'
+                              : 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+                          }
+                        `}
+                      >
+                        {formatTime(
+                          slot.start
+                        )}
+                      </button>
+                    )
+                  }
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom summary */}
+        <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                New appointment time
+              </h3>
+
+              {selectedDate &&
+              selectedSlot ? (
+                <div className="mt-2 text-gray-600">
+                  <span className="font-medium text-gray-900">
+                    {selectedDate.toLocaleDateString(
+                      undefined,
+                      {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      }
+                    )}
+                  </span>
+
+                  <span className="mx-2">
+                    •
+                  </span>
+
+                  <span>
+                    {formatTime(
+                      selectedSlot.start
+                    )}{' '}
+                    -{' '}
+                    {formatTime(
+                      selectedSlot.end
+                    )}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-gray-500 mt-2">
+                  Select a date and available time.
+                </p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              disabled={
+                !selectedDate ||
+                !selectedSlot ||
+                rescheduling
+              }
+              onClick={
+                handleReschedule
+              }
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+            >
+              {rescheduling ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Rescheduling...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  Reschedule Appointment
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
