@@ -47,7 +47,7 @@ export default function RecentActivity({ appointments: propAppointments }: Recen
         `)
         .eq('patient_id', user.id)
         .in('status', ['completed', 'confirmed', 'cancelled', 'pending_payment'])
-        .order('created_at', { ascending: false })  // Sort by created_at, not starts_at
+        .order('created_at', { ascending: false })
         .limit(3)
 
       if (error) throw error
@@ -115,7 +115,8 @@ export default function RecentActivity({ appointments: propAppointments }: Recen
           reason: app.reason,
           notes: app.notes,
           doctor_id: app.doctor_id,
-          created_at: app.created_at,  // Include created_at
+          patient_id: app.patient_id,  // ✅ Add patient_id
+          created_at: app.created_at,
           doctor_profiles: {
             users: {
               full_name: doctorUser.full_name || 'Unknown',
@@ -181,24 +182,16 @@ export default function RecentActivity({ appointments: propAppointments }: Recen
     }
   }
 
-  // Fix: Get relative date using created_at with proper timezone handling
   const getRelativeDate = (dateString: string) => {
     if (!dateString) return 'Recently'
     
     const date = new Date(dateString)
     const now = new Date()
     
-    // Get timezone offset in milliseconds
-    const offset = now.getTimezoneOffset() * 60000
-    const dateUTC = new Date(date.getTime() + offset)
-    const nowUTC = new Date(now.getTime() + offset)
-    
-    const diffMs = nowUTC.getTime() - dateUTC.getTime()
+    const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
-    
-    console.log('Date:', dateString, 'Now:', now, 'Diff days:', diffDays) // Debug log
     
     if (diffMins < 1) return 'Just now'
     if (diffMins < 60) return `${diffMins}m ago`
@@ -255,7 +248,6 @@ export default function RecentActivity({ appointments: propAppointments }: Recen
           const avatarColor = getAvatarColor(doctorName)
           const initials = getInitials(doctorName)
           
-          // Use created_at for the date, fallback to starts_at
           const dateString = (appointment as any).created_at || appointment.starts_at
           const relativeDate = getRelativeDate(dateString)
           const actionDescription = getActionDescription(appointment)
